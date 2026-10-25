@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HK Online Circuit Simulator</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- =======================================================================
+       1. TOP NAVIGATION BAR (Matching Screenshot)
+       ======================================================================= -->
+  <header class="top-nav">
+    <div class="nav-left">
+      <div class="brand-logo" title="HK Online Circuit Simulator" style="font-size: 13px; font-weight: 800;">HK</div>
+      <input type="text" class="circuit-title" value="HK Online Circuit Simulator" id="circuit-name-input" spellcheck="false" />
+      
+      <div class="nav-divider"></div>
+      
+      <!-- Document Controls -->
+      <button class="tool-btn" id="btn-new" title="New Circuit (+)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="tool-btn" id="btn-save" title="Save Circuit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      </button>
+      <button class="tool-btn" id="btn-undo" title="Undo (Ctrl+Z)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+      </button>
+      <button class="tool-btn" id="btn-redo" title="Redo (Ctrl+Y)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
+      </button>
+
+      <div class="nav-divider"></div>
+
+      <!-- Editing Tools -->
+      <button class="tool-btn active" id="tool-select" title="Pointer / Select Tool">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 3l12 12-4.5 1 3.5 7-2.5 1-3.5-7L4 21V3z"/></svg>
+      </button>
+      <button class="tool-btn" id="tool-wire" title="Wire Tool (Connect Pins)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 19 10 19 14 5 20 5"/></svg>
+      </button>
+      <button class="tool-btn" id="tool-delete" title="Delete Component / Wire">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+
+      <div class="nav-divider"></div>
+
+      <!-- Simulation Run / Stop & Mode Selector -->
+      <button class="btn-run" id="btn-run" title="Run Simulation">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>Run</span>
+      </button>
+      <button class="btn-stop" id="btn-stop" title="Stop Simulation">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+      </button>
+
+      <!-- Analysis Mode Dropdown -->
+      <select class="mode-select" id="sim-mode-select">
+        <option value="transient" selected>Transient (time)</option>
+        <option value="ac_sweep">AC Sweep (frequency)</option>
+      </select>
+
+      <!-- Multisim Live Layout Switcher (Figure 8.2) -->
+      <div class="layout-toggle-group">
+        <button class="btn-layout" id="layout-schematic" title="Tampilkan Skematik Saja">Schematic</button>
+        <button class="btn-layout active" id="layout-split" title="Tampilkan Skematik dan Grafik Berdampingan (Split)">Split</button>
+        <button class="btn-layout" id="layout-grapher" title="Tampilkan Grafik/Osiloskop Saja">Grapher</button>
+      </div>
+    </div>
+
+    <!-- Right Controls -->
+    <div class="nav-right">
+      <button class="btn-practicum" id="btn-open-practicum" title="Buka Asisten Praktikum Experiment 8">
+        📚 <span>Praktikum Exp 8</span>
+      </button>
+      <div class="nav-divider"></div>
+      <button class="tool-btn" id="btn-open-settings" title="Simulation Settings (Figure 8.3 & 8.7)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <button class="tool-btn active" id="btn-toggle-grid" title="Toggle Grid Snap (#)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="10" y2="21"/><line x1="16" y1="3" x2="16" y2="21"/></svg>
+      </button>
+      
+      <!-- Zoom Engine Controls -->
+      <button class="tool-btn" id="btn-zoom-in" title="Zoom In (+)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      </button>
+      <span class="zoom-level-badge" id="zoom-percentage" title="Tingkat Zoom">100%</span>
+      <button class="tool-btn" id="btn-zoom-out" title="Zoom Out (-)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      </button>
+      <button class="tool-btn" id="btn-zoom-reset" title="Reset Zoom (Fit 100%)" style="font-size:10.5px;font-weight:700;">1:1</button>
+
+      <button class="tool-btn" id="btn-fullscreen" title="Fullscreen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      </button>
+      <button class="tool-btn" id="btn-download" title="Export / Download Netlist & Schematic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- =======================================================================
+       MAIN SPLIT WRAPPER (Multisim Live Side-by-Side Split View)
+       ======================================================================= -->
+  <div class="main-split-wrapper" id="main-split-wrapper">
+
+  <!-- =======================================================================
+       2. MAIN WORKSPACE CONTAINER
+       ======================================================================= -->
+  <main class="workspace-container">
+
+    <!-- Left Sidebar: Components Palette -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">Components</span>
+        <button class="btn-collapse" id="btn-collapse-sidebar" title="Collapse sidebar">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      </div>
+
+      <div class="sidebar-search">
+        <input type="text" class="search-input" id="part-search-input" placeholder="Search parts..." />
+      </div>
+
+      <div class="parts-list" id="parts-list">
+        <!-- PASSIVE Category -->
+        <div class="category-group">
+          <div class="category-title">Passive</div>
+          <div class="part-item" data-type="resistor" title="Click to place Resistor">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><path d="M 2 10 L 10 10 L 13 4 L 19 16 L 25 4 L 31 16 L 34 10 L 38 10"/></svg>
+            </div>
+            <span class="part-name">Resistor</span>
+          </div>
+
+          <div class="part-item" data-type="resistor" title="Potentiometer">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><path d="M 2 10 L 10 10 L 13 4 L 19 16 L 25 4 L 31 16 L 34 10 L 38 10"/><polyline points="22 18 22 2 28 6"/></svg>
+            </div>
+            <span class="part-name">Potentiometer</span>
+          </div>
+
+          <div class="part-item" data-type="capacitor" title="Capacitor">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><line x1="2" y1="10" x2="17" y2="10"/><line x1="17" y1="3" x2="17" y2="17"/><line x1="23" y1="3" x2="23" y2="17"/><line x1="23" y1="10" x2="38" y2="10"/></svg>
+            </div>
+            <span class="part-name">Capacitor</span>
+          </div>
+
+          <div class="part-item" data-type="inductor" title="Inductor">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><path d="M 2 10 L 8 10 A 4 4 0 0 1 16 10 A 4 4 0 0 1 24 10 A 4 4 0 0 1 32 10 L 38 10"/></svg>
+            </div>
+            <span class="part-name">Inductor</span>
+          </div>
+        </div>
+
+        <!-- SOURCES Category -->
+        <div class="category-group">
+          <div class="category-title">Sources</div>
+          <div class="part-item" data-type="battery" title="Battery (DC Source)">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><line x1="2" y1="10" x2="16" y2="10"/><line x1="16" y1="3" x2="16" y2="17"/><line x1="20" y1="6" x2="20" y2="14"/><line x1="24" y1="3" x2="24" y2="17"/><line x1="28" y1="6" x2="28" y2="14"/><line x1="28" y1="10" x2="38" y2="10"/></svg>
+            </div>
+            <span class="part-name">Battery</span>
+          </div>
+
+          <div class="part-item" data-type="dc_source" title="DC Voltage Source">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><circle cx="20" cy="10" r="7"/><line x1="2" y1="10" x2="13" y2="10"/><line x1="27" y1="10" x2="38" y2="10"/></svg>
+            </div>
+            <span class="part-name">DC Voltage Source</span>
+          </div>
+
+          <div class="part-item" data-type="ac_source" title="AC Voltage Source">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><circle cx="20" cy="10" r="7"/><path d="M 16 10 Q 18 7 20 10 T 24 10"/><line x1="2" y1="10" x2="13" y2="10"/><line x1="27" y1="10" x2="38" y2="10"/></svg>
+            </div>
+            <span class="part-name">AC Voltage Source</span>
+          </div>
+
+          <div class="part-item" data-type="pulse_source" title="Pulse Source">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><circle cx="20" cy="10" r="7"/><path d="M 16 12 L 18 12 L 18 8 L 22 8 L 22 12 L 24 12"/><line x1="2" y1="10" x2="13" y2="10"/><line x1="27" y1="10" x2="38" y2="10"/></svg>
+            </div>
+            <span class="part-name">Pulse Source</span>
+          </div>
+
+          <div class="part-item" data-type="current_source" title="Current Source">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><circle cx="20" cy="10" r="7"/><line x1="16" y1="10" x2="24" y2="10"/><polyline points="21 7 24 10 21 13"/><line x1="2" y1="10" x2="13" y2="10"/><line x1="27" y1="10" x2="38" y2="10"/></svg>
+            </div>
+            <span class="part-name">Current Source</span>
+          </div>
+        </div>
+
+        <!-- SEMICONDUCTORS & ACTIVE -->
+        <div class="category-group">
+          <div class="category-title">Semiconductors</div>
+          <div class="part-item" data-type="diode" title="Diode">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><line x1="2" y1="10" x2="16" y2="10"/><polygon points="16,5 24,10 16,15"/><line x1="24" y1="5" x2="24" y2="15"/><line x1="24" y1="10" x2="38" y2="10"/></svg>
+            </div>
+            <span class="part-name">Diode</span>
+          </div>
+
+          <div class="part-item" data-type="opamp" title="Operational Amplifier">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><polygon points="12,3 30,10 12,17"/><line x1="2" y1="6" x2="12" y2="6"/><line x1="2" y1="14" x2="12" y2="14"/><line x1="30" y1="10" x2="38" y2="10"/></svg>
+            </div>
+            <span class="part-name">Op-Amp</span>
+          </div>
+        </div>
+
+        <!-- INSTRUMENTS & REFERENCES -->
+        <div class="category-group">
+          <div class="category-title">Measurement & Ref</div>
+          <div class="part-item" data-type="probe" title="Voltage Probe (VP)">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><circle cx="20" cy="8" r="5" fill="#1e293b"/><line x1="20" y1="13" x2="20" y2="19"/><polygon points="20,19 18,15 22,15" fill="#1e293b"/></svg>
+            </div>
+            <span class="part-name">Voltage Probe (VP)</span>
+          </div>
+
+          <div class="part-item" data-type="ground" title="Ground (GND)">
+            <div class="part-icon">
+              <svg viewBox="0 0 40 20"><line x1="20" y1="2" x2="20" y2="10"/><line x1="12" y1="10" x2="28" y2="10"/><line x1="15" y1="13" x2="25" y2="13"/><line x1="18" y1="16" x2="22" y2="16"/></svg>
+            </div>
+            <span class="part-name">Ground (GND)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        Drag or tap a part to place it — or tap a famous circuit to load it.
+      </div>
+    </aside>
+
+    <!-- Schematic Canvas Viewport -->
+    <section class="canvas-viewport" id="canvas-viewport">
+      <svg id="schematic-svg" class="schematic-svg"></svg>
+      
+      <!-- Live Simulation Status Overlay Banner -->
+      <div id="sim-status-banner" class="sim-status-banner stopped">
+        <span class="status-badge-dot" style="background:#ef4444"></span>
+        <span>Simulasi Berhenti (Paused)</span>
+      </div>
+
+      <div class="canvas-hint">Klik/tarik terminal untuk kabel • Klik kabel untuk hapus • Klik komponen untuk ganti nilai</div>
+
+      <!-- Floating Tooltip to Delete Wire -->
+      <div id="wire-delete-tooltip" class="wire-delete-tooltip" style="display: none;">
+        <span>🗑 Hapus Kabel</span>
+      </div>
+
+      <!-- Floating Component Quick Property Inspector Card -->
+      <div id="floating-prop-card" class="floating-prop-card">
+        <div class="prop-card-head">
+          <span class="prop-card-title" id="card-comp-name">R1 Resistor</span>
+          <button class="prop-card-close" id="btn-close-prop-card" title="Tutup">&times;</button>
+        </div>
+        <div class="prop-val-row">
+          <label class="prop-val-label">Nilai Komponen:</label>
+          <input type="text" class="prop-val-input" id="card-prop-input" spellcheck="false" placeholder="Contoh: 1kΩ, 2uF, 5V" />
+        </div>
+        <div class="prop-quick-title">Nilai Praktikum Cepat:</div>
+        <div class="prop-presets-grid" id="card-presets-grid">
+          <!-- Dynamically populated presets -->
+        </div>
+        <div class="prop-card-actions">
+          <button class="btn-preset-chip" id="btn-card-rot-comp" title="Putar komponen 90 derajat (Shortcut keyboard: R)" style="flex:1; background:#f1f5f9; color:#0284c7; border-color:#bae6fd;">
+            ↻ Putar 90° (R)
+          </button>
+          <button class="btn-action-del" id="btn-card-del-comp" title="Hapus komponen ini">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+            <span>Hapus</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Resizable Divider for Side-by-Side Split View -->
+  <div class="split-resizer" id="split-resizer" title="Geser ke kiri / kanan untuk mengatur lebar skematik dan grafik"></div>
+
+  <!-- =======================================================================
+       4. OSCILLOSCOPE & DATA TABLE DRAWER (Matching Screenshot)
+       ======================================================================= -->
+  <section class="oscilloscope-panel" id="oscilloscope-panel">
+    <div class="scope-resize-handle"></div>
+    
+    <div class="scope-header">
+      <div class="scope-left-tabs">
+        <span class="scope-title">Oscilloscope</span>
+        <button class="scope-tab-btn active" id="tab-scope-graph">Grafik Waveform</button>
+        <button class="scope-tab-btn" id="tab-scope-table">Tabel Data (Sample Waktu)</button>
+      </div>
+
+      <div class="scope-channels">
+        <span class="channel-tag" id="ch1-badge"><span class="dot dot-ch1"></span> CH1 VP · Vpp 5.00 V</span>
+        <span class="channel-tag" id="ch2-badge"><span class="dot dot-ch2"></span> CH2 VP · Vpp 4.60 V</span>
+      </div>
+    </div>
+
+    <div class="scope-content">
+      <!-- 4.1 VIEW 1: OSCILLOSCOPE WAVEFORM CANVAS -->
+      <div class="scope-graph-view" id="scope-graph-view">
+        <canvas id="scope-canvas" class="scope-canvas"></canvas>
+        <div class="scope-cursor-readout" id="cursor-readout">
+          <span>Arahkan kursor ke grafik untuk membaca nilai</span>
+        </div>
+      </div>
+
+      <!-- 4.2 VIEW 2: DATA TABLE INSPECTOR (Ambil Data di Waktu Tertentu) -->
+      <div class="scope-table-view" id="scope-table-view">
+        <div class="table-toolbar" style="flex-direction: column; align-items: stretch; gap: 8px;">
+          <!-- Top Row: Mode Switcher + Action Buttons -->
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+            <div class="table-mode-switcher">
+              <button class="btn-table-mode active" id="btn-mode-v" type="button">
+                🎯 Target Voltage (Vc)
+              </button>
+              <button class="btn-table-mode" id="btn-mode-t" type="button">
+                ⏱️ Target Time (t)
+              </button>
+            </div>
+
+            <div class="table-actions-right">
+              <button class="btn-table-action" id="btn-clear-table" title="Bersihkan semua baris sampel tabel">🗑️ Bersihkan</button>
+              <button class="btn-table-action primary" id="btn-export-csv" title="Unduh data tabel ke file CSV">📥 Unduh CSV</button>
+              <button class="btn-table-action" id="btn-toggle-raw-data" title="Tampilkan / Sembunyikan semua data mentah simulasi">👁️ Raw Data</button>
+            </div>
+          </div>
+
+          <!-- Middle Row: Target Voltage Subpanel -->
+          <div id="subpanel-voltage" class="table-subpanel">
+            <span class="subpanel-label">Target Vc:</span>
+            <div class="input-with-unit">
+              <input type="number" step="0.05" id="target-v-input" placeholder="3.16" value="3.16" />
+              <span class="unit-tag">V</span>
+            </div>
+            <button class="btn-add-sample" id="btn-add-v">➕ Tambah Data (+)</button>
+            <div class="preset-chips-wrap">
+              <span class="preset-label">Cepat:</span>
+              <button class="btn-preset-chip btn-target-v-chip" data-v="3.16" title="Table 8.1 Charging (1τ)">3.16V (1τ)</button>
+              <button class="btn-preset-chip btn-target-v-chip" data-v="4.325" title="Table 8.1 Charging (2τ)">4.325V (2τ)</button>
+              <button class="btn-preset-chip btn-target-v-chip" data-v="4.75" title="Table 8.1 Charging (3τ)">4.75V (3τ)</button>
+              <button class="btn-preset-chip btn-target-v-chip" data-v="1.84" title="Table 8.2 Discharging (1τ)">1.84V</button>
+              <button class="btn-preset-chip btn-target-v-chip" data-v="0.675" title="Table 8.2 Discharging (2τ)">0.675V</button>
+              <button class="btn-preset-chip btn-target-v-chip" data-v="0.25" title="Table 8.2 Discharging (3τ)">0.25V</button>
+            </div>
+          </div>
+
+          <!-- Middle Row (Alternate): Target Time Subpanel -->
+          <div id="subpanel-time" class="table-subpanel" style="display: none;">
+            <span class="subpanel-label">Target Waktu (t):</span>
+            <div class="input-with-unit">
+              <input type="number" step="0.1" min="0" id="target-t-input" placeholder="1.0" value="1.0" />
+              <span class="unit-tag">ms</span>
+            </div>
+            <button class="btn-add-sample" id="btn-add-t">➕ Tambah Data (+)</button>
+            <div class="preset-chips-wrap">
+              <span class="preset-label">Cepat:</span>
+              <button class="btn-preset-chip btn-target-t-chip" data-t="0.5">0.5 ms</button>
+              <button class="btn-preset-chip btn-target-t-chip" data-t="1.0">1.0 ms (1τ)</button>
+              <button class="btn-preset-chip btn-target-t-chip" data-t="2.0">2.0 ms (2τ)</button>
+              <button class="btn-preset-chip btn-target-t-chip" data-t="3.0">3.0 ms (3τ)</button>
+              <button class="btn-preset-chip btn-target-t-chip" data-t="4.0">4.0 ms</button>
+              <button class="btn-preset-chip btn-target-t-chip" data-t="5.0">5.0 ms</button>
+            </div>
+          </div>
+
+          <!-- Bottom Row: Confirmation Feedback Badge -->
+          <div id="query-result-badge" class="table-feedback-badge" style="display:none;"></div>
+        </div>
+
+        <div class="table-scroll-container">
+          <table class="data-table">
+            <thead id="table-head">
+              <!-- Dynamically populated -->
+            </thead>
+            <tbody id="table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  </div> <!-- End of main-split-wrapper -->
+
+  <!-- =======================================================================
+       3. STATUS BAR (Multisim Live Bottom Status)
+       ======================================================================= -->
+  <footer class="status-bar">
+    <div class="status-left" id="status-summary">
+      <span class="status-badge"><span class="status-badge-dot"></span> Solved</span>
+      <span>2 nodes</span>
+      <span>Total power 0 W</span>
+      <span>1000 pts</span>
+    </div>
+    <div class="status-right">
+      <button class="btn-toggle-scope" id="btn-toggle-scope">Hide oscilloscope</button>
+    </div>
+  </footer>
+
+  <!-- =======================================================================
+       SIMULATION SETTINGS MODAL (Multisim Live Document Tab Figure 8.3 & 8.7)
+       ======================================================================= -->
+  <div class="settings-modal-overlay" id="settings-modal">
+    <div class="settings-modal-card">
+      <div class="settings-modal-header">
+        <span>⚙️ Simulation Settings (Document Tab)</span>
+        <button class="practicum-modal-close" id="btn-close-settings">&times;</button>
+      </div>
+      <div class="settings-modal-body">
+        <div class="settings-group">
+          <label>Simulation Mode:</label>
+          <select id="setting-sim-type">
+            <option value="transient">Transient (time)</option>
+            <option value="ac_sweep">AC Sweep (frequency)</option>
+          </select>
+        </div>
+
+        <!-- Transient Settings (Figure 8.3) -->
+        <div id="settings-transient-fields">
+          <div class="settings-group">
+            <label>Start time (s):</label>
+            <input type="text" id="setting-tstart" value="0" />
+          </div>
+          <div class="settings-group">
+            <label>End time (s) [e.g. 1e-2 / 10ms]:</label>
+            <input type="text" id="setting-tend" value="1e-2" />
+          </div>
+          <div class="settings-group">
+            <label>Initial conditions:</label>
+            <select id="setting-init-cond">
+              <option value="zero">Determine automatically (Zero)</option>
+              <option value="user_defined">User defined (5V init)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- AC Sweep Settings (Figure 8.7) -->
+        <div id="settings-ac-fields" style="display: none;">
+          <div class="settings-group">
+            <label>Start frequency (Hz):</label>
+            <input type="text" id="setting-fstart" value="1" />
+          </div>
+          <div class="settings-group">
+            <label>Stop frequency (Hz) [e.g. 1e10 / 10GHz]:</label>
+            <input type="text" id="setting-fstop" value="1e10" />
+          </div>
+          <div class="settings-group">
+            <label>Points per decade:</label>
+            <input type="number" id="setting-points-decade" value="10" />
+          </div>
+        </div>
+      </div>
+      <div class="settings-modal-footer">
+        <button class="btn-modal-cancel" id="btn-cancel-settings">Batal</button>
+        <button class="btn-modal-save" id="btn-save-settings">Terapkan Pengaturan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+       5. PRACTICUM ASSISTANT MODAL (Experiment 8: Binus Lab)
+       ======================================================================= -->
+  <div class="practicum-modal-overlay" id="practicum-modal">
+    <div class="practicum-modal-card">
+      <div class="practicum-modal-head">
+        <div class="practicum-modal-title">
+          <span>📚 Asisten Praktikum: Experiment 8 Advance Computer-Aided Circuit Analysis</span>
+        </div>
+        <button class="practicum-modal-close" id="btn-close-practicum">&times;</button>
+      </div>
+
+      <div class="practicum-tabs">
+        <button class="practicum-tab-btn active" id="tab-exp8-1">Tabel 8.1: RC Charging</button>
+        <button class="practicum-tab-btn" id="tab-exp8-2">Tabel 8.2: RC Discharging</button>
+        <button class="practicum-tab-btn" id="tab-exp8-3">Tabel 8.3: RLC AC Sweep</button>
+      </div>
+
+      <div class="practicum-body">
+        <!-- Panel 1: Table 8.1 RC Charging -->
+        <div class="practicum-panel" id="panel-exp8-1">
+          <div class="practicum-action-bar">
+            <div>
+              <strong>Gambar 8.1: RC Circuit Transient Charging</strong>
+              <div style="font-size: 11.5px; color: #64748b; margin-top: 2px;">V1 = 5V, End time = 10ms (1e-2s). Cari waktu saat VC mencapai 3.16V, 4.325V, dan 4.75V.</div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-load-preset" id="btn-load-gbr81">⚡ Muat Sirkuit Gbr 8.1</button>
+              <button class="btn-copy-table" id="btn-copy-t81">📋 Salin Tabel 8.1</button>
+            </div>
+          </div>
+
+          <table class="lab-table" id="table-8-1">
+            <thead>
+              <tr>
+                <th rowspan="2">Resistor</th>
+                <th rowspan="2">Capacitor</th>
+                <th rowspan="2">Time Constant (τ)</th>
+                <th colspan="3">Time saat Tegangan VC Mencapai</th>
+              </tr>
+              <tr>
+                <th>3.16 V (1τ)</th>
+                <th>4.325 V (2τ)</th>
+                <th>4.75 V (3τ)</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-t81">
+              <!-- Auto generated -->
+            </tbody>
+          </table>
+
+          <div class="theory-callout">
+            💡 <strong>Rumus Dasar Pengisian:</strong> \( V_C(t) = V_{bat} (1 - e^{-t / \tau}) \). Pada \( t = 1\tau \), \( V_C = 5 \times 0.632 = 3.16\text{ V} \). Pada \( t = 2\tau \), \( V_C = 4.325\text{ V} \). Pada \( t = 3\tau \), \( V_C = 4.75\text{ V} \). Waktu pengisian berbanding lurus dengan nilai \( R \) dan \( C \).
+          </div>
+        </div>
+
+        <!-- Panel 2: Table 8.2 RC Discharging -->
+        <div class="practicum-panel" id="panel-exp8-2" style="display: none;">
+          <div class="practicum-action-bar">
+            <div>
+              <strong>Gambar 8.5: RC Circuit Transient Discharging</strong>
+              <div style="font-size: 11.5px; color: #64748b; margin-top: 2px;">Sumber dilepas, V_init = 5V. Cari waktu saat VC turun mencapai 1.84V, 0.675V, dan 0.25V.</div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-load-preset" id="btn-load-gbr85">🔄 Muat Sirkuit Gbr 8.5 (Discharge)</button>
+              <button class="btn-copy-table" id="btn-copy-t82">📋 Salin Tabel 8.2</button>
+            </div>
+          </div>
+
+          <table class="lab-table" id="table-8-2">
+            <thead>
+              <tr>
+                <th rowspan="2">Resistor</th>
+                <th rowspan="2">Capacitor</th>
+                <th rowspan="2">Time Constant (τ)</th>
+                <th colspan="3">Time saat Tegangan VC Mencapai</th>
+              </tr>
+              <tr>
+                <th>1.84 V (1τ)</th>
+                <th>0.675 V (2τ)</th>
+                <th>0.25 V (3τ)</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-t82">
+              <!-- Auto generated -->
+            </tbody>
+          </table>
+
+          <div class="theory-callout">
+            💡 <strong>Rumus Dasar Pengosongan:</strong> \( V_C(t) = V_0 \cdot e^{-t / \tau} \). Pada \( t = 1\tau \), \( V_C = 5 \times 0.368 = 1.84\text{ V} \). Pada \( t = 2\tau \), \( V_C = 0.675\text{ V} \). Pada \( t = 3\tau \), \( V_C = 0.25\text{ V} \).
+          </div>
+        </div>
+
+        <!-- Panel 3: Table 8.3 RLC AC Sweep -->
+        <div class="practicum-panel" id="panel-exp8-3" style="display: none;">
+          <div class="practicum-action-bar">
+            <div>
+              <strong>Gambar 8.6: RLC Circuit AC Sweep (Respon Frekuensi)</strong>
+              <div style="font-size: 11.5px; color: #64748b; margin-top: 2px;">V1 = 3.00V AC, R = 1.00kΩ, C = 1.00μF, L = 1μH. Frekuensi: 1 Hz, 100 kHz, 10 GHz.</div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-load-preset" id="btn-load-gbr86">〰️ Muat Sirkuit Gbr 8.6 (RLC)</button>
+              <button class="btn-copy-table" id="btn-copy-t83">📋 Salin Tabel 8.3</button>
+            </div>
+          </div>
+
+          <table class="lab-table" id="table-8-3">
+            <thead>
+              <tr>
+                <th rowspan="2">Frequency</th>
+                <th colspan="3">Magnitude</th>
+                <th colspan="3">Phase</th>
+              </tr>
+              <tr>
+                <th>VR</th>
+                <th>VC</th>
+                <th>VL</th>
+                <th>∠VR</th>
+                <th>∠VC</th>
+                <th>∠VL</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-t83">
+              <!-- Auto generated -->
+            </tbody>
+          </table>
+
+          <div class="theory-callout">
+            💡 <strong>Analisis Respon Frekuensi RLC:</strong><br>
+            • Pada frekuensi rendah (1 Hz): Kapasitor mendominasi (\(X_C \approx 159\text{ k}\Omega \gg R\)), sehingga hampir seluruh tegangan jatuh di VC (\(\approx 3.00\text{ V}\)).<br>
+            • Pada 100 kHz: Resistor mendominasi (\(R = 1\text{ k}\Omega \gg X_C, X_L\)), tegangan VR mencapai maksimum (\(\approx 3.00\text{ V}\)) dan sefasa (\(\approx 0^\circ\)).<br>
+            • Pada frekuensi sangat tinggi (10 GHz): Induktor mendominasi (\(X_L \approx 62.8\text{ k}\Omega \gg R\)), tegangan VL mendominasi (\(\approx 3.00\text{ V}\)).
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
