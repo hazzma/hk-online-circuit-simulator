@@ -4,7 +4,36 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HK Online Circuit Simulator</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=2.2">
+  <style>
+    /* Critical Inspector Side Panel Styles (Guaranteed against browser cache) */
+    #floating-prop-card,
+    .component-inspector-panel {
+      position: absolute !important;
+      top: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 320px !important;
+      background: #ffffff !important;
+      border-left: 1px solid #cbd5e1 !important;
+      box-shadow: -6px 0 24px rgba(0, 0, 0, 0.12) !important;
+      padding: 16px !important;
+      z-index: 100 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 12px !important;
+      overflow-y: auto !important;
+      transform: translateX(105%) !important;
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+      pointer-events: none !important;
+    }
+
+    #floating-prop-card.active,
+    .component-inspector-panel.active {
+      transform: translateX(0) !important;
+      pointer-events: auto !important;
+    }
+  </style>
 </head>
 <body>
 
@@ -679,6 +708,6 @@
   </div>
 
   <!-- Scripts -->
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=2.2"></script>
 </body>
 </html>

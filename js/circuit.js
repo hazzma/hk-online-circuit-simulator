@@ -737,6 +737,18 @@ export class CircuitCanvas {
         e.stopPropagation();
       });
 
+      // Direct click fallback to guarantee inspector opens on tap
+      el.addEventListener('click', (e) => {
+        if (e.target.classList.contains('comp-pin') || e.target.classList.contains('comp-pin-hitbox')) return;
+        const comp = this.components.find(c => c.id === el.id);
+        if (comp) {
+          this.selectedElement = comp;
+          this.selectedComponents = [comp];
+          this.showPropertyCard(comp);
+        }
+        e.stopPropagation();
+      });
+
       // Track hovered component for 'R' / 'Space' shortcut
       el.addEventListener('mouseenter', () => {
         this.hoveredComp = this.components.find(c => c.id === el.id);

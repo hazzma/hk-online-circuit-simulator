@@ -665,6 +665,7 @@ body.sim-stopped .wire-arrow-marker {
 /* ==========================================================================
    Docked Right Side Component Properties Inspector Panel
    ========================================================================== */
+#floating-prop-card,
 .floating-prop-card,
 .component-inspector-panel {
   position: absolute;
@@ -686,6 +687,7 @@ body.sim-stopped .wire-arrow-marker {
   pointer-events: none;
 }
 
+#floating-prop-card.active,
 .floating-prop-card.active,
 .component-inspector-panel.active {
   transform: translateX(0);
