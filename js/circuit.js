@@ -377,6 +377,9 @@ export class CircuitCanvas {
     };
 
     this.components.push(newComp);
+    this.clearSelection();
+    this.selectedElement = newComp;
+    this.selectedComponents = [newComp];
     this.render();
     this.showPropertyCard(newComp);
 
@@ -430,14 +433,22 @@ export class CircuitCanvas {
     // 2. Components SVG
     const componentsSvg = this.components.map(comp => this.renderComponent(comp)).join('');
 
-    // 3. Dynamic Voltage Annotations
-    const annotationsSvg = `
-      <g id="annotations-group">
-        <text x="370" y="235" class="voltage-annotation">${voltages.v1.toFixed(1)} V</text>
-        <text x="500" y="235" class="voltage-annotation">${voltages.v2.toFixed(1)} V</text>
-        <text x="290" y="450" class="voltage-annotation" style="fill:#2563eb">0 V</text>
-      </g>
-    `;
+    // 3. Dynamic Voltage Annotations (Rendered ONLY if probe components exist on canvas)
+    let annotationsSvg = '';
+    const probes = this.components.filter(c => c.type === 'probe');
+    if (probes.length > 0) {
+      const texts = probes.map((p, idx) => {
+        let v = 0;
+        if (voltages) {
+          if (idx === 0 && voltages.v1 !== undefined) v = voltages.v1;
+          else if (idx === 1 && voltages.v2 !== undefined) v = voltages.v2;
+        }
+        const vNum = typeof v === 'number' ? v : parseFloat(v) || 0;
+        const color = idx === 0 ? '#ef4444' : '#0284c7';
+        return `<text x="${p.x + 14}" y="${p.y - 12}" class="voltage-annotation" style="fill: ${color}; font-weight: 700;">${vNum.toFixed(1)} V</text>`;
+      });
+      annotationsSvg = `<g id="annotations-group">${texts.join('')}</g>`;
+    }
 
     this.svg.innerHTML = `
       <defs>
@@ -690,11 +701,13 @@ export class CircuitCanvas {
         if (!comp) return;
 
         // If not already part of multi-selection, select this component
-        if (!this.selectedComponents.some(c => c.id === comp.id)) {
-          if (!e.shiftKey) {
+        if (!e.shiftKey) {
+          if (!this.selectedComponents.some(c => c.id === comp.id)) {
             this.clearSelection();
             this.selectedComponents = [comp];
-          } else {
+          }
+        } else {
+          if (!this.selectedComponents.some(c => c.id === comp.id)) {
             this.selectedComponents.push(comp);
           }
         }
@@ -713,6 +726,13 @@ export class CircuitCanvas {
           const gEl = document.getElementById(c.id);
           if (gEl) gEl.classList.add('selected');
         });
+
+        // Open Side Inspector Panel IMMEDIATELY for single component selection!
+        if (this.selectedComponents.length === 1) {
+          this.showPropertyCard(comp);
+        } else {
+          this.hidePropertyCard();
+        }
 
         e.stopPropagation();
       });
@@ -940,9 +960,8 @@ export class CircuitCanvas {
         const rawDx = svgCur.x - this.dragStartSvgPos.x;
         const rawDy = svgCur.y - this.dragStartSvgPos.y;
 
-        if (Math.abs(rawDx) > 3 || Math.abs(rawDy) > 3) {
+        if (Math.hypot(rawDx, rawDy) > 8) {
           this.hasMovedDuringDrag = true;
-          this.hidePropertyCard();
           this.hideWireTooltip();
         }
 
@@ -996,14 +1015,19 @@ export class CircuitCanvas {
 
         if (moved) {
           this.render();
+          if (this.selectedComponents.length === 1) {
+            this.showPropertyCard(this.selectedComponents[0]);
+          }
           if (this.onCircuitChanged) {
             this.onCircuitChanged(this.getCircuitData());
           }
         } else {
           // User just clicked the component without dragging!
-          // NEVER re-render here to preserve DOM click target:
           this.selectedElement = comp;
-          this.showPropertyCard(comp);
+          if (this.selectedComponents.length <= 1) {
+            this.selectedComponents = [comp];
+            this.showPropertyCard(comp);
+          }
         }
       }
     });
@@ -1128,7 +1152,9 @@ export class CircuitCanvas {
       ground: 'Ground',
       probe: 'Probe Tegangan'
     };
-    this.propTitleEl.textContent = `${comp.name} · ${typeNames[comp.type] || comp.type}`;
+    if (this.propTitleEl) {
+      this.propTitleEl.textContent = `${comp.name || ''} · ${typeNames[comp.type] || comp.type || ''}`;
+    }
 
     const stdSection = document.getElementById('standard-comp-controls');
     const acSection = document.getElementById('ac-source-controls');
@@ -1153,7 +1179,7 @@ export class CircuitCanvas {
       if (acSection) acSection.style.display = 'none';
 
       if (this.propInputEl) {
-        this.propInputEl.value = comp.value;
+        this.propInputEl.value = comp.value || '';
       }
 
       let presets = [];
@@ -1170,7 +1196,7 @@ export class CircuitCanvas {
       if (this.propPresetsEl) {
         if (presets.length > 0) {
           this.propPresetsEl.innerHTML = presets.map(val => {
-            const isActive = comp.value.toLowerCase().replace(/\s/g, '') === val.toLowerCase().replace(/\s/g, '');
+            const isActive = (comp.value || '').toLowerCase().replace(/\s/g, '') === val.toLowerCase().replace(/\s/g, '');
             return `<button class="btn-preset-chip ${isActive ? 'active' : ''}" data-val="${val}">${val}</button>`;
           }).join('');
 
