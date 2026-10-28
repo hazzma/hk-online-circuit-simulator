@@ -408,9 +408,17 @@ export class CircuitCanvas {
   getPinAbsolutePos(pinId) {
     const item = this.getPinById(pinId);
     if (!item) return null;
+    const rot = item.comp.rotation || 0;
+    const rad = (rot * Math.PI) / 180;
+    const cos = Math.round(Math.cos(rad));
+    const sin = Math.round(Math.sin(rad));
+    const relX = item.pin.relX || 0;
+    const relY = item.pin.relY || 0;
+    const rotX = relX * cos - relY * sin;
+    const rotY = relX * sin + relY * cos;
     return {
-      x: item.comp.x + (item.pin.relX || 0),
-      y: item.comp.y + (item.pin.relY || 0)
+      x: item.comp.x + rotX,
+      y: item.comp.y + rotY
     };
   }
 
@@ -648,7 +656,14 @@ export class CircuitCanvas {
     this.svg.querySelectorAll('.comp-group').forEach(el => {
       el.addEventListener('mousedown', (e) => {
         if (e.target.classList.contains('comp-pin') || e.target.classList.contains('comp-pin-hitbox')) return;
-        if (e.button !== 0) return; // Only left click for comp drag
+        if (e.button !== 0) {
+          if (e.button === 2) {
+            e.stopPropagation();
+            e.preventDefault();
+            this.cancelAllActions();
+          }
+          return; // Only left click for comp drag
+        }
 
         if (this.currentTool === 'delete') {
           this.deleteComponent(el.id);
@@ -686,7 +701,7 @@ export class CircuitCanvas {
         e.stopPropagation();
       });
 
-      // Track hovered component for 'R' shortcut
+      // Track hovered component for 'R' / 'Space' shortcut
       el.addEventListener('mouseenter', () => {
         this.hoveredComp = this.components.find(c => c.id === el.id);
       });
@@ -700,6 +715,14 @@ export class CircuitCanvas {
     // 2. Pin Hitbox & Click for Wire Connection
     this.svg.querySelectorAll('.comp-pin, .comp-pin-hitbox').forEach(pinEl => {
       pinEl.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) {
+          if (e.button === 2) {
+            e.stopPropagation();
+            e.preventDefault();
+            this.cancelAllActions();
+          }
+          return;
+        }
         e.stopPropagation();
         e.preventDefault();
         const pinId = pinEl.dataset.pinId;
@@ -712,6 +735,14 @@ export class CircuitCanvas {
 
     // 3. Wire Click & Hitbox for Deletion / Selection
     this.svg.querySelectorAll('.wire-hitbox, .wire-path').forEach(wireEl => {
+      wireEl.addEventListener('mousedown', (e) => {
+        if (e.button === 2) {
+          e.stopPropagation();
+          e.preventDefault();
+          this.cancelAllActions();
+          return;
+        }
+      });
       wireEl.addEventListener('click', (e) => {
         e.stopPropagation();
         const wireId = wireEl.dataset.wireId;
@@ -731,8 +762,20 @@ export class CircuitCanvas {
   }
 
   initEventListeners() {
+    // Context Menu (Right Click) everywhere on canvas -> Cancel & Unselect
+    this.container.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.cancelAllActions();
+    });
+
     // A. Canvas Background Mousedown: Marquee Box Selection (Left click) or Pan (Middle click / Alt)
     this.svg.addEventListener('mousedown', (e) => {
+      if (e.button === 2) {
+        e.preventDefault();
+        this.cancelAllActions();
+        return;
+      }
+
       if (e.target.id === 'bg-grid-rect' || e.target.tagName === 'svg') {
         if (e.button === 1 || e.altKey) {
           // Middle click or Alt -> Pan Canvas
@@ -741,6 +784,13 @@ export class CircuitCanvas {
           this.panStartViewBox = { x: this.viewBox.x, y: this.viewBox.y };
           this.svg.style.cursor = 'grabbing';
         } else if (e.button === 0) {
+          // If in wire drawing mode or active pin is selected, clicking empty canvas cancels!
+          if (this.activePin) {
+            this.cancelAllActions();
+            e.preventDefault();
+            return;
+          }
+
           // Left Click -> Start Marquee Box Selection (Nge-block komponen)
           this.isSelectingBox = true;
           this.boxStartSvg = this.clientToSvgPoint(e.clientX, e.clientY);
@@ -914,19 +964,12 @@ export class CircuitCanvas {
       const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
       if (activeTag === 'input' || activeTag === 'textarea') return;
 
-      if (e.key === 'r' || e.key === 'R') {
+      if (e.key === 'r' || e.key === 'R' || e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
         if (this.selectedComponents && this.selectedComponents.length > 1) {
           // Batch rotate all multi-selected components
           this.selectedComponents.forEach(c => {
             c.rotation = ((c.rotation || 0) + 90) % 360;
-            if (c.pins) {
-              c.pins.forEach(p => {
-                const oldX = p.relX || 0;
-                const oldY = p.relY || 0;
-                p.relX = -oldY;
-                p.relY = oldX;
-              });
-            }
           });
           this.render();
           if (this.onCircuitChanged) this.onCircuitChanged(this.getCircuitData());
@@ -969,13 +1012,7 @@ export class CircuitCanvas {
         this.svg.querySelectorAll('.comp-group').forEach(g => g.classList.add('selected'));
         this.svg.querySelectorAll('.wire-path').forEach(w => w.classList.add('selected-wire'));
       } else if (e.key === 'Escape') {
-        this.activePin = null;
-        this.hidePreviewWire();
-        this.clearSelection();
-        this.setTool('select');
-        if (window.app && window.app.updateToolButtons) {
-          window.app.updateToolButtons('select');
-        }
+        this.cancelAllActions();
       }
     });
 
@@ -1013,16 +1050,6 @@ export class CircuitCanvas {
     if (!comp) return;
 
     comp.rotation = ((comp.rotation || 0) + 90) % 360;
-
-    // Rotate pins 90 degrees clockwise: (relX, relY) -> (-relY, relX)
-    if (comp.pins) {
-      comp.pins.forEach(p => {
-        const oldX = p.relX || 0;
-        const oldY = p.relY || 0;
-        p.relX = -oldY;
-        p.relY = oldX;
-      });
-    }
 
     this.render();
     this.showPropertyCard(comp);
@@ -1231,6 +1258,23 @@ export class CircuitCanvas {
     this.svg.querySelectorAll('.comp-pin').forEach(p => p.classList.remove('pin-active'));
   }
 
+  cancelAllActions() {
+    this.cancelWiring();
+    this.clearSelection();
+    this.setTool('select');
+    if (this.isSelectingBox) {
+      this.isSelectingBox = false;
+      const boxEl = document.getElementById('marquee-selection-box');
+      if (boxEl) boxEl.style.display = 'none';
+    }
+    if (this.draggedComp) {
+      this.draggedComp = null;
+    }
+    if (window.app && window.app.updateToolButtons) {
+      window.app.updateToolButtons('select');
+    }
+  }
+
   updatePreviewWire(clientX, clientY) {
     if (!this.activePin) return;
     const pStart = this.getPinAbsolutePos(this.activePin.pinId);
@@ -1344,99 +1388,7 @@ export class CircuitCanvas {
     });
   }
 
-  addComponent(type, posX = 450, posY = 300) {
-    const id = `${type}_${Date.now()}`;
-    const x = Math.round(posX / this.gridSize) * this.gridSize;
-    const y = Math.round(posY / this.gridSize) * this.gridSize;
 
-    let comp = {
-      id,
-      type,
-      name: type.toUpperCase().slice(0, 3),
-      value: '1kΩ',
-      x,
-      y,
-      rotation: 0,
-      pins: []
-    };
-
-    switch (type) {
-      case 'resistor':
-        comp.name = 'R';
-        comp.value = '1kΩ';
-        comp.pins = [
-          { id: `${id}_1`, name: '1', relX: -45, relY: 0, node: null },
-          { id: `${id}_2`, name: '2', relX: 45, relY: 0, node: null }
-        ];
-        break;
-      case 'capacitor':
-        comp.name = 'C';
-        comp.value = '1uF';
-        comp.pins = [
-          { id: `${id}_1`, name: '+', relX: 0, relY: -45, node: null },
-          { id: `${id}_2`, name: '-', relX: 0, relY: 45, node: null }
-        ];
-        break;
-      case 'inductor':
-        comp.name = 'L';
-        comp.value = '10mH';
-        comp.pins = [
-          { id: `${id}_1`, name: '1', relX: -45, relY: 0, node: null },
-          { id: `${id}_2`, name: '2', relX: 45, relY: 0, node: null }
-        ];
-        break;
-      case 'battery':
-      case 'dc_source':
-        comp.name = 'BAT';
-        comp.value = '5V';
-        comp.pins = [
-          { id: `${id}_p`, name: '+', relX: 0, relY: -45, node: null },
-          { id: `${id}_n`, name: '-', relX: 0, relY: 45, node: 0 }
-        ];
-        break;
-      case 'ac_source':
-        comp.name = 'AC';
-        comp.value = '3V 1kHz';
-        comp.pins = [
-          { id: `${id}_p`, name: '+', relX: -30, relY: 0, node: null },
-          { id: `${id}_n`, name: '-', relX: 30, relY: 0, node: 0 }
-        ];
-        break;
-      case 'ground':
-        comp.name = 'GND';
-        comp.value = '0V';
-        comp.pins = [
-          { id: `${id}_g`, name: 'gnd', relX: 0, relY: -25, node: 0 }
-        ];
-        break;
-      case 'probe':
-        comp.name = 'VP';
-        comp.value = 'CH';
-        comp.pins = [
-          { id: `${id}_p`, name: 'p', relX: 0, relY: 30, node: 1 }
-        ];
-        break;
-      case 'diode':
-        comp.name = 'D';
-        comp.value = '1N4148';
-        comp.pins = [
-          { id: `${id}_a`, name: 'A', relX: -30, relY: 0, node: null },
-          { id: `${id}_k`, name: 'K', relX: 30, relY: 0, node: null }
-        ];
-        break;
-      default:
-        comp.pins = [
-          { id: `${id}_1`, name: '1', relX: -30, relY: 0, node: null },
-          { id: `${id}_2`, name: '2', relX: 30, relY: 0, node: null }
-        ];
-    }
-
-    this.components.push(comp);
-    this.selectedElement = comp;
-    this.render();
-    this.showPropertyCard(comp);
-    if (this.onCircuitChanged) this.onCircuitChanged(this.getCircuitData());
-  }
 
   deleteComponent(compId) {
     this.components = this.components.filter(c => c.id !== compId);
