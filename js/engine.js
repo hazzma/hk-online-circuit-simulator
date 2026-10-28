@@ -39,6 +39,44 @@ export class CircuitEngine {
   }
 
   /**
+   * Helper to parse AC voltage and frequency with RMS, Amplitude, or Peak-to-Peak
+   */
+  parseAcSource(comp) {
+    let vAmp = 5.0;
+    let freq = 1000;
+
+    if (comp.acMode === 'rms') {
+      vAmp = (parseFloat(comp.acVoltage) || 5.0) * Math.SQRT2;
+    } else if (comp.acMode === 'pkpk') {
+      vAmp = (parseFloat(comp.acVoltage) || 10.0) / 2;
+    } else if (comp.acVoltage !== undefined && !isNaN(parseFloat(comp.acVoltage))) {
+      vAmp = parseFloat(comp.acVoltage);
+    } else {
+      const valStr = comp.value || '';
+      if (valStr.includes('Vrms') || valStr.includes('vrms')) {
+        const num = parseFloat(valStr) || 5.0;
+        vAmp = num * Math.SQRT2;
+      } else if (valStr.includes('Vpp') || valStr.includes('vpp')) {
+        const num = parseFloat(valStr) || 10.0;
+        vAmp = num / 2;
+      } else {
+        vAmp = parseFloat(valStr) || 5.0;
+      }
+    }
+
+    if (comp.acFreq !== undefined && !isNaN(parseFloat(comp.acFreq))) {
+      freq = this.parseEngValue(comp.acFreq) || 1000;
+    } else {
+      const parts = (comp.value || '').split(/\s+/);
+      if (parts.length > 1) {
+        freq = this.parseEngValue(parts[1]) || 1000;
+      }
+    }
+
+    return { vAmp, freq };
+  }
+
+  /**
    * Perform Transient Analysis (Time domain solving)
    */
   runTransient(circuit) {
@@ -47,6 +85,9 @@ export class CircuitEngine {
     // Extract key circuit parameters from components
     let vBat = 5.0;
     let hasBattery = false;
+    let hasAcSource = false;
+    let acAmp = 5.0;
+    let acFreq = 1000;
     let rVal = 1000;    // 1 kOhm
     let cVal = 0.000001; // 1 uF
     let lVal = 0.01;     // 10 mH (if any)
@@ -57,6 +98,11 @@ export class CircuitEngine {
       if (comp.type === 'battery' || comp.type === 'dc_source') {
         vBat = parseFloat(comp.value) || 5.0;
         hasBattery = true;
+      } else if (comp.type === 'ac_source') {
+        hasAcSource = true;
+        const acData = this.parseAcSource(comp);
+        acAmp = acData.vAmp;
+        acFreq = acData.freq;
       } else if (comp.type === 'resistor') {
         rVal = this.parseEngValue(comp.value) || 1000;
       } else if (comp.type === 'capacitor') {
@@ -69,13 +115,18 @@ export class CircuitEngine {
       }
     });
 
-    if (!hasBattery) {
+    if (!hasBattery && !hasAcSource) {
       isDischarge = true;
     }
 
     const tau = rVal * cVal; // Time constant
-    // Adapt total time window based on tau (up to ~5 tau)
-    const effectiveTStop = Math.max(0.005, tau * 5);
+    // Adapt total time window based on tau or AC frequency
+    let effectiveTStop = Math.max(0.005, tau * 5);
+    if (hasAcSource && acFreq > 0) {
+      const acPeriod = 1 / acFreq;
+      effectiveTStop = Math.max(acPeriod * 4, 0.002);
+    }
+
     const timeVector = [];
     const vNode1 = []; 
     const vNode2 = []; 
@@ -89,20 +140,30 @@ export class CircuitEngine {
 
     for (let i = 0; i <= numSteps; i++) {
       const t = i * dt;
-      
-      if (isDischarge) {
+      let vin = 0;
+
+      if (hasAcSource) {
+        // Pure sinusoidal AC wave
+        vin = acAmp * Math.sin(2 * Math.PI * acFreq * t);
+        // ODE for capacitor voltage in RC circuit: dVc/dt = (vin - vc)/(R*C)
+        if (i > 0) {
+          vc = vc + dt * ((vin - vc) / (rVal * cVal));
+        }
+      } else if (isDischarge) {
         // Discharging curve: Vc(t) = V0 * exp(-t / tau)
         vc = 5.0 * Math.exp(-t / tau);
+        vin = 0.0;
       } else {
         // Charging curve: Vc(t) = Vbat * (1 - exp(-t / tau))
         vc = vBat * (1 - Math.exp(-t / tau));
+        vin = vBat;
       }
 
-      const iRes = isDischarge ? (vc / rVal) : ((vBat - vc) / rVal);
+      const iRes = hasAcSource ? ((vin - vc) / rVal) : (isDischarge ? (vc / rVal) : ((vBat - vc) / rVal));
       const energyCap = 0.5 * cVal * vc * vc;
 
       timeVector.push(t);
-      vNode1.push(isDischarge ? 0.0 : vBat);
+      vNode1.push(vin);
       vNode2.push(vc);
       currentList.push(iRes);
 
@@ -110,7 +171,7 @@ export class CircuitEngine {
         tableData.push({
           time: t,
           timeMs: (t * 1000).toFixed(3),
-          vIn: (isDischarge ? 0.0 : vBat).toFixed(4),
+          vIn: vin.toFixed(4),
           vOut: vc.toFixed(4),
           currentMa: (iRes * 1000).toFixed(4),
           energyUj: (energyCap * 1e6).toFixed(4)

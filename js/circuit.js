@@ -26,6 +26,7 @@ export class CircuitCanvas {
     this.baseViewBox = { w: 1200, h: 700 };
     this.zoomLevel = 1.0;
     this.isPanning = false;
+    this.hasPannedDuringRightClick = false;
     this.panStartMouse = { x: 0, y: 0 };
     this.panStartViewBox = { x: 0, y: 0 };
 
@@ -472,20 +473,20 @@ export class CircuitCanvas {
     const fromItem = wire.fromPin ? this.getPinById(wire.fromPin) : null;
     const toItem = wire.toPin ? this.getPinById(wire.toPin) : null;
 
-    let reverse = false;
+    let reverseArrow = false;
     if (fromItem && fromItem.comp.type === 'ground') {
-      reverse = true;
+      reverseArrow = true;
     } else if (toItem && (toItem.comp.type === 'battery' || toItem.comp.type === 'dc_source' || toItem.comp.type === 'ac_source') && toItem.pin.name === '+') {
-      reverse = true;
+      reverseArrow = true;
     }
 
-    return reverse ? { pStart: pEnd, pEnd: pStart } : { pStart, pEnd };
+    return { pStart, pEnd, reverseArrow };
   }
 
   renderWire(wire) {
     const endpoints = this.getWireEndpoints(wire);
     if (!endpoints) return '';
-    const { pStart, pEnd } = endpoints;
+    const { pStart, pEnd, reverseArrow } = endpoints;
 
     let d = '';
     const dx = Math.abs(pEnd.x - pStart.x);
@@ -512,6 +513,10 @@ export class CircuitCanvas {
         arrowY = (midY + pEnd.y) / 2;
         arrowAngle = Math.atan2(pEnd.y - midY, pEnd.x - midX) * 180 / Math.PI;
       }
+    }
+
+    if (reverseArrow) {
+      arrowAngle = (arrowAngle + 180) % 360;
     }
 
     const isSelected = (this.selectedWire && this.selectedWire.id === wire.id) || 
@@ -585,6 +590,8 @@ export class CircuitCanvas {
         shapeSvg = `
           <circle cx="0" cy="0" r="16" class="comp-body" />
           <path d="M -30 0 L -16 0 M 16 0 L 30 0 M -8 0 Q -4 -7 0 0 T 8 0" class="comp-body" />
+          <text x="-24" y="-7" font-size="10" font-weight="700" fill="#475569">+</text>
+          <text x="18" y="-7" font-size="12" font-weight="700" fill="#475569">-</text>
         `;
         labelSvg = `
           <text x="-24" y="-22" class="comp-label">${comp.name}</text>
@@ -643,6 +650,7 @@ export class CircuitCanvas {
     return `
       <g class="comp-group ${isSelected ? 'selected' : ''}" id="${comp.id}" transform="translate(${comp.x}, ${comp.y})" style="cursor: move;">
         <g transform="rotate(${rot})">
+          <rect x="-42" y="-35" width="84" height="70" fill="transparent" class="comp-drag-hitbox" />
           ${shapeSvg}
           ${pinsSvg}
         </g>
@@ -658,9 +666,17 @@ export class CircuitCanvas {
         if (e.target.classList.contains('comp-pin') || e.target.classList.contains('comp-pin-hitbox')) return;
         if (e.button !== 0) {
           if (e.button === 2) {
-            e.stopPropagation();
+            if (this.activePin) {
+              this.cancelAllActions();
+              return;
+            }
+            // Allow right-click drag to pan canvas from anywhere
+            this.isPanning = true;
+            this.hasPannedDuringRightClick = false;
+            this.panStartMouse = { x: e.clientX, y: e.clientY };
+            this.panStartViewBox = { x: this.viewBox.x, y: this.viewBox.y };
+            this.svg.style.cursor = 'grabbing';
             e.preventDefault();
-            this.cancelAllActions();
           }
           return; // Only left click for comp drag
         }
@@ -717,9 +733,16 @@ export class CircuitCanvas {
       pinEl.addEventListener('mousedown', (e) => {
         if (e.button !== 0) {
           if (e.button === 2) {
-            e.stopPropagation();
+            if (this.activePin) {
+              this.cancelAllActions();
+              return;
+            }
+            this.isPanning = true;
+            this.hasPannedDuringRightClick = false;
+            this.panStartMouse = { x: e.clientX, y: e.clientY };
+            this.panStartViewBox = { x: this.viewBox.x, y: this.viewBox.y };
+            this.svg.style.cursor = 'grabbing';
             e.preventDefault();
-            this.cancelAllActions();
           }
           return;
         }
@@ -737,9 +760,16 @@ export class CircuitCanvas {
     this.svg.querySelectorAll('.wire-hitbox, .wire-path').forEach(wireEl => {
       wireEl.addEventListener('mousedown', (e) => {
         if (e.button === 2) {
-          e.stopPropagation();
+          if (this.activePin) {
+            this.cancelAllActions();
+            return;
+          }
+          this.isPanning = true;
+          this.hasPannedDuringRightClick = false;
+          this.panStartMouse = { x: e.clientX, y: e.clientY };
+          this.panStartViewBox = { x: this.viewBox.x, y: this.viewBox.y };
+          this.svg.style.cursor = 'grabbing';
           e.preventDefault();
-          this.cancelAllActions();
           return;
         }
       });
@@ -762,17 +792,33 @@ export class CircuitCanvas {
   }
 
   initEventListeners() {
-    // Context Menu (Right Click) everywhere on canvas -> Cancel & Unselect
+    // Context Menu (Right Click) everywhere on canvas -> Cancel & Unselect if not panning
     this.container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      if (this.hasPannedDuringRightClick) {
+        this.hasPannedDuringRightClick = false;
+        return;
+      }
       this.cancelAllActions();
     });
 
-    // A. Canvas Background Mousedown: Marquee Box Selection (Left click) or Pan (Middle click / Alt)
+    // A. Canvas Background Mousedown:
     this.svg.addEventListener('mousedown', (e) => {
-      if (e.button === 2) {
+      if (e.button === 2 || e.button === 1 || e.altKey) {
+        // If actively drawing a wire, right-clicking cancels wiring immediately
+        if (e.button === 2 && this.activePin) {
+          this.cancelAllActions();
+          e.preventDefault();
+          return;
+        }
+
+        // Right-Click, Middle click, or Alt -> Pan Canvas
+        this.isPanning = true;
+        this.hasPannedDuringRightClick = false;
+        this.panStartMouse = { x: e.clientX, y: e.clientY };
+        this.panStartViewBox = { x: this.viewBox.x, y: this.viewBox.y };
+        this.svg.style.cursor = 'grabbing';
         e.preventDefault();
-        this.cancelAllActions();
         return;
       }
 
@@ -825,6 +871,9 @@ export class CircuitCanvas {
       if (this.isPanning) {
         const dx = e.clientX - this.panStartMouse.x;
         const dy = e.clientY - this.panStartMouse.y;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+          this.hasPannedDuringRightClick = true;
+        }
         const rect = this.container.getBoundingClientRect();
         const scaleX = this.viewBox.w / rect.width;
         const scaleY = this.viewBox.h / rect.height;
@@ -1063,19 +1112,9 @@ export class CircuitCanvas {
     this.selectedWire = null;
     this.hideWireTooltip();
 
-    // Map SVG coordinates to Client Screen pixels for popup placement
-    const clientPos = this.svgToClientPoint(comp.x, comp.y);
-    const containerRect = this.container.getBoundingClientRect();
-
-    let left = clientPos.x - containerRect.left + 35;
-    let top = clientPos.y - containerRect.top - 25;
-
-    if (left + 240 > containerRect.width) left = clientPos.x - containerRect.left - 245;
-    if (top + 260 > containerRect.height) top = containerRect.height - 270;
-    if (top < 10) top = 10;
-
-    this.propCardEl.style.left = `${left}px`;
-    this.propCardEl.style.top = `${top}px`;
+    // Docked Right Side Inspector Panel
+    this.propCardEl.style.left = '';
+    this.propCardEl.style.top = '';
     this.propCardEl.classList.add('active');
 
     const typeNames = {
@@ -1090,37 +1129,129 @@ export class CircuitCanvas {
       probe: 'Probe Tegangan'
     };
     this.propTitleEl.textContent = `${comp.name} · ${typeNames[comp.type] || comp.type}`;
-    this.propInputEl.value = comp.value;
 
-    let presets = [];
-    if (comp.type === 'resistor') {
-      presets = ['100Ω', '500Ω', '1kΩ', '2kΩ', '5kΩ', '10kΩ'];
-    } else if (comp.type === 'capacitor') {
-      presets = ['100nF', '470nF', '1uF', '2uF', '10uF'];
-    } else if (comp.type === 'battery' || comp.type === 'dc_source') {
-      presets = ['3V', '5V', '9V', '12V', '24V'];
-    } else if (comp.type === 'ac_source') {
-      presets = ['1V 1kHz', '3V 1kHz', '5V 1kHz', '10V 100Hz'];
-    } else if (comp.type === 'inductor') {
-      presets = ['1uH', '10uH', '100uH', '1mH', '10mH'];
+    const stdSection = document.getElementById('standard-comp-controls');
+    const acSection = document.getElementById('ac-source-controls');
+
+    if (comp.type === 'ac_source') {
+      if (stdSection) stdSection.style.display = 'none';
+      if (acSection) acSection.style.display = 'flex';
+
+      // Initialize AC Source parameters if not already present
+      comp.acMode = comp.acMode || 'amplitude';
+      if (comp.acVoltage === undefined) {
+        comp.acVoltage = parseFloat(comp.value) || 5.0;
+      }
+      if (!comp.acFreq) {
+        const parts = (comp.value || '').split(/\s+/);
+        comp.acFreq = parts.length > 1 ? parts[1] : '1 kHz';
+      }
+
+      this.updateAcSourceInspector(comp);
+    } else {
+      if (stdSection) stdSection.style.display = 'flex';
+      if (acSection) acSection.style.display = 'none';
+
+      if (this.propInputEl) {
+        this.propInputEl.value = comp.value;
+      }
+
+      let presets = [];
+      if (comp.type === 'resistor') {
+        presets = ['100Ω', '500Ω', '1kΩ', '2kΩ', '5kΩ', '10kΩ'];
+      } else if (comp.type === 'capacitor') {
+        presets = ['100nF', '470nF', '1uF', '2uF', '10uF'];
+      } else if (comp.type === 'battery' || comp.type === 'dc_source') {
+        presets = ['3V', '5V', '9V', '12V', '24V'];
+      } else if (comp.type === 'inductor') {
+        presets = ['1uH', '10uH', '100uH', '1mH', '10mH'];
+      }
+
+      if (this.propPresetsEl) {
+        if (presets.length > 0) {
+          this.propPresetsEl.innerHTML = presets.map(val => {
+            const isActive = comp.value.toLowerCase().replace(/\s/g, '') === val.toLowerCase().replace(/\s/g, '');
+            return `<button class="btn-preset-chip ${isActive ? 'active' : ''}" data-val="${val}">${val}</button>`;
+          }).join('');
+
+          this.propPresetsEl.querySelectorAll('.btn-preset-chip').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const newVal = btn.dataset.val;
+              if (this.propInputEl) this.propInputEl.value = newVal;
+              this.applyPropertyValue(comp, newVal);
+              this.showPropertyCard(comp);
+            });
+          });
+        } else {
+          this.propPresetsEl.innerHTML = '<span style="font-size:11px;color:#94a3b8;">Ketik nilai langsung di atas.</span>';
+        }
+      }
+    }
+  }
+
+  updateAcSourceInspector(comp) {
+    const acVoltageInput = document.getElementById('ac-voltage-input');
+    const acFreqInput = document.getElementById('ac-freq-input');
+    const acVoltageLabel = document.getElementById('ac-voltage-label');
+    const convVp = document.getElementById('conv-vp');
+    const convVrms = document.getElementById('conv-vrms');
+    const convVpp = document.getElementById('conv-vpp');
+    const modeTabs = document.querySelectorAll('#ac-mode-tabs .btn-ac-mode');
+
+    modeTabs.forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.mode === comp.acMode);
+    });
+
+    const modeLabels = {
+      amplitude: 'Tegangan Amplitudo (Vp):',
+      rms: 'Tegangan Efektif (Vrms):',
+      pkpk: 'Tegangan Peak-to-Peak (Vpp):'
+    };
+    if (acVoltageLabel) {
+      acVoltageLabel.textContent = modeLabels[comp.acMode] || 'Tegangan AC:';
     }
 
-    if (presets.length > 0) {
-      this.propPresetsEl.innerHTML = presets.map(val => {
-        const isActive = comp.value.toLowerCase().replace(/\s/g, '') === val.toLowerCase().replace(/\s/g, '');
-        return `<button class="btn-preset-chip ${isActive ? 'active' : ''}" data-val="${val}">${val}</button>`;
-      }).join('');
+    if (acVoltageInput) {
+      acVoltageInput.value = comp.acVoltage;
+    }
+    if (acFreqInput) {
+      acFreqInput.value = comp.acFreq;
+    }
 
-      this.propPresetsEl.querySelectorAll('.btn-preset-chip').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const newVal = btn.dataset.val;
-          this.propInputEl.value = newVal;
-          this.applyPropertyValue(comp, newVal);
-          this.showPropertyCard(comp);
-        });
-      });
-    } else {
-      this.propPresetsEl.innerHTML = '<span style="font-size:11px;color:#94a3b8;">Ketik nilai langsung di atas.</span>';
+    // Live multi-mode calculations
+    const val = parseFloat(comp.acVoltage) || 0;
+    let vp = 0, vrms = 0, vpp = 0;
+    if (comp.acMode === 'amplitude') {
+      vp = val;
+      vrms = vp / Math.SQRT2;
+      vpp = vp * 2;
+    } else if (comp.acMode === 'rms') {
+      vrms = val;
+      vp = vrms * Math.SQRT2;
+      vpp = vp * 2;
+    } else { // pkpk
+      vpp = val;
+      vp = vpp / 2;
+      vrms = vp / Math.SQRT2;
+    }
+
+    if (convVp) convVp.textContent = `${vp.toFixed(2)} V`;
+    if (convVrms) convVrms.textContent = `${vrms.toFixed(2)} V`;
+    if (convVpp) convVpp.textContent = `${vpp.toFixed(2)} V`;
+
+    // Format display string
+    let suffix = 'Vpk';
+    if (comp.acMode === 'rms') suffix = 'Vrms';
+    if (comp.acMode === 'pkpk') suffix = 'Vpp';
+    comp.value = `${val}${suffix} ${comp.acFreq}`;
+
+    const valLabel = document.getElementById(`val_label_${comp.id}`);
+    if (valLabel) {
+      valLabel.textContent = comp.value;
+    }
+
+    if (this.onCircuitChanged) {
+      this.onCircuitChanged(this.getCircuitData());
     }
   }
 
@@ -1152,6 +1283,51 @@ export class CircuitCanvas {
         }
       });
     }
+
+    // AC Source Spec Mode Tabs (Amplitude, RMS, Pk-Pk)
+    const modeTabs = document.querySelectorAll('#ac-mode-tabs .btn-ac-mode');
+    modeTabs.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (this.selectedElement && this.selectedElement.type === 'ac_source') {
+          this.selectedElement.acMode = btn.dataset.mode;
+          this.updateAcSourceInspector(this.selectedElement);
+        }
+      });
+    });
+
+    // AC Source Voltage Input
+    const acVoltageInput = document.getElementById('ac-voltage-input');
+    if (acVoltageInput) {
+      acVoltageInput.addEventListener('input', (e) => {
+        if (this.selectedElement && this.selectedElement.type === 'ac_source') {
+          this.selectedElement.acVoltage = parseFloat(e.target.value) || 0;
+          this.updateAcSourceInspector(this.selectedElement);
+        }
+      });
+    }
+
+    // AC Source Frequency Input
+    const acFreqInput = document.getElementById('ac-freq-input');
+    if (acFreqInput) {
+      acFreqInput.addEventListener('input', (e) => {
+        if (this.selectedElement && this.selectedElement.type === 'ac_source') {
+          this.selectedElement.acFreq = e.target.value;
+          this.updateAcSourceInspector(this.selectedElement);
+        }
+      });
+    }
+
+    // AC Source Frequency Presets
+    const freqPresets = document.querySelectorAll('#ac-freq-presets .btn-preset-chip');
+    freqPresets.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (this.selectedElement && this.selectedElement.type === 'ac_source') {
+          this.selectedElement.acFreq = btn.dataset.freq;
+          freqPresets.forEach(b => b.classList.toggle('active', b === btn));
+          this.updateAcSourceInspector(this.selectedElement);
+        }
+      });
+    });
 
     if (this.btnCardClose) {
       this.btnCardClose.addEventListener('click', () => {
@@ -1337,7 +1513,7 @@ export class CircuitCanvas {
       if ((p1Item && p1Item.comp.id === compId) || (p2Item && p2Item.comp.id === compId)) {
         const endpoints = this.getWireEndpoints(wire);
         if (!endpoints) return;
-        const { pStart, pEnd } = endpoints;
+        const { pStart, pEnd, reverseArrow } = endpoints;
 
         let d = '';
         const dx = Math.abs(pEnd.x - pStart.x);
@@ -1364,6 +1540,10 @@ export class CircuitCanvas {
             arrowY = (midY + pEnd.y) / 2;
             arrowAngle = Math.atan2(pEnd.y - midY, pEnd.x - midX) * 180 / Math.PI;
           }
+        }
+
+        if (reverseArrow) {
+          arrowAngle = (arrowAngle + 180) % 360;
         }
 
         const pathEl = document.getElementById(wire.id);
